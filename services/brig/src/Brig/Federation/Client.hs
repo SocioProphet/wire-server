@@ -30,9 +30,11 @@ import Control.Error.Util ((!?))
 import Control.Lens (view, (^.))
 import Control.Monad.Trans.Except (ExceptT (..), throwE)
 import qualified Data.Aeson as Aeson
+import Data.Domain (Domain)
 import Data.Handle
 import Data.Id (ClientId, UserId)
 import Data.Qualified
+import qualified Data.Map as Map
 import Data.String.Conversions
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
@@ -55,7 +57,7 @@ type FedAppIO = ExceptT FedError AppIO
 -- See https://wearezeta.atlassian.net/browse/SQCORE-491 for the issue on error handling improvements.
 getUserHandleInfo :: Qualified Handle -> FedAppIO (Maybe UserProfile)
 getUserHandleInfo (Qualified handle domain) = do
-  Log.info $ Log.msg $ T.pack "Brig-federation: handle lookup call on remote backend"
+  Log.info $ Log.msg ("Brig-federation: handle lookup call on remote backend" :: ByteString)
   federatorClient <- mkFederatorClient
   let call = Proto.ValidatedFederatedRequest domain (mkGetUserInfoByHandle handle)
   res <- expectOk =<< callRemote federatorClient call
@@ -79,6 +81,28 @@ claimPrekey (Qualified user domain) client = do
       Left err -> throwE (InvalidResponseBody (T.pack err))
       Right x -> pure $ Just x
     code -> throwE (InvalidResponseCode code)
+
+-- FUTUREWORK: Test
+getUsersByIds :: [Qualified UserId] -> FedAppIO [UserProfile]
+getUsersByIds quids = do
+  Log.info $ Log.msg ("Brig-federation: get users by ids on remote backends" :: ByteString)
+  federatorClient <- mkFederatorClient
+  let domainWiseIds = qualifiedToMap quids
+      requests = Map.foldMapWithKey (\domain uids -> [Proto.ValidatedFederatedRequest domain (mkGetUsersByIds uids)]) domainWiseIds
+  -- TODO: Make these concurrent
+  concat <$> mapM (processResponse <=< expectOk <=< callRemote federatorClient) requests
+  where
+    -- TODO: Do we want to not fail the whole request if there is one bad remote?
+    processResponse :: Proto.HTTPResponse -> FedAppIO [UserProfile]
+    processResponse res =
+      case Proto.responseStatus res of
+        200 -> case Aeson.eitherDecodeStrict (Proto.responseBody res) of
+          Left err -> throwE (InvalidResponseBody (T.pack err))
+          Right profiles -> pure profiles
+        code -> throwE (InvalidResponseCode code)
+
+qualifiedToMap :: [Qualified a] -> Map Domain [a]
+qualifiedToMap = Map.fromListWith (<>) . map (\(Qualified thing domain) -> (domain, [thing]) )
 
 -- FUTUREWORK: It would be nice to share the client across all calls to
 -- federator and not call this function on every invocation of federated
@@ -140,3 +164,14 @@ errWithPayloadAndStatus maybePayload code =
 grpc500 :: LT.Text -> Handler a
 grpc500 msg = do
   throwStd $ Wai.Error HTTP.status500 "federator-grpc-failure" msg
+
+throwJsonParseFailure :: String -> Handler a
+throwJsonParseFailure err =
+  throwStd $ Wai.Error statusUnexpectedFederationResponse "invalid-json-from-remote" ("Failed to parse json with error: " <> LT.pack err)
+
+throwUnknownStatusError :: Word32 -> Handler a
+throwUnknownStatusError status =
+  throwStd $ Wai.Error statusUnexpectedFederationResponse "unknown-status-from-remote" ("Unknown status from remote: " <> LT.pack (show status))
+
+statusUnexpectedFederationResponse :: HTTP.Status
+statusUnexpectedFederationResponse = HTTP.Status 533 "Unexpected Federation Response"
