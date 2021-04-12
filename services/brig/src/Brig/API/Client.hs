@@ -63,7 +63,7 @@ import Data.IdMapping
 import Data.List.Split (chunksOf)
 import qualified Data.Map.Strict as Map
 import Data.Misc (PlainTextPassword (..))
-import Data.Qualified (Qualified(..), partitionRemoteOrLocalIds)
+import Data.Qualified (Qualified (..), partitionRemoteOrLocalIds)
 import Galley.Types (UserClientMap (..), UserClients (..))
 import Imports
 import Network.Wai.Utilities
@@ -157,7 +157,7 @@ claimPrekey u d c = do
   if isLocalDomain
     then lift $ claimLocalPrekey u c
     else claimRemotePrekey (Qualified u d) c
-    
+
 claimLocalPrekey :: UserId -> ClientId -> AppIO (Maybe ClientPrekey)
 claimLocalPrekey self client = do
   prekey <- Data.claimPrekey self client

@@ -33,8 +33,8 @@ import qualified Data.Aeson as Aeson
 import Data.Domain (Domain)
 import Data.Handle
 import Data.Id (ClientId, UserId)
-import Data.Qualified
 import qualified Data.Map as Map
+import Data.Qualified
 import Data.String.Conversions
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
@@ -102,7 +102,7 @@ getUsersByIds quids = do
         code -> throwE (InvalidResponseCode code)
 
 qualifiedToMap :: [Qualified a] -> Map Domain [a]
-qualifiedToMap = Map.fromListWith (<>) . map (\(Qualified thing domain) -> (domain, [thing]) )
+qualifiedToMap = Map.fromListWith (<>) . map (\(Qualified thing domain) -> (domain, [thing]))
 
 -- FUTUREWORK: It would be nice to share the client across all calls to
 -- federator and not call this function on every invocation of federated
