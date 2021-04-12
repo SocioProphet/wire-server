@@ -1109,7 +1109,7 @@ getPrekeyUnqualifiedH user client = do
 
 getPrekeyH :: Domain -> UserId -> ClientId -> Handler Public.ClientPrekey
 getPrekeyH domain user client = do
-  mPrekey <- lift (API.claimPrekey user domain client)
+  mPrekey <- API.claimPrekey user domain client !>> clientError
   ifNothing (notFound "prekey not found") mPrekey
 
 getPrekeyBundleUnqualifiedH :: UserId -> Handler Public.PrekeyBundle
